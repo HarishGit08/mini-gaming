@@ -1,73 +1,64 @@
 .container {
   text-align: center;
-  background: linear-gradient(135deg, #000000, #1a1a1a);
-  color: white;
   min-height: 100vh;
   padding: 20px;
-  font-family: Arial, sans-serif;
+  transition: 0.3s ease;
+}
+
+.container.dark {
+  background: linear-gradient(135deg, #0f172a, #1e293b);
+  color: white;
+}
+
+.container.light {
+  background: linear-gradient(135deg, #e2e8f0, #cbd5e1);
+  color: black;
+}
+
+h1 {
+  font-size: 28px;
+  margin-bottom: 10px;
 }
 
 .board {
   display: grid;
-  grid-template-columns: repeat(3, 100px);
-  gap: 10px;
+  grid-template-columns: repeat(3, 90px);
+  gap: 12px;
   justify-content: center;
-  margin: 20px 0;
+  margin: 20px auto;
 }
 
 .cell {
-  width: 100px;
-  height: 100px;
-  font-size: 36px;
-  font-weight: bold;
-  background: #111;
-  color: #00ffcc;
-  border: 2px solid #444;
-  border-radius: 12px;
+  width: 90px;
+  height: 90px;
+  font-size: 28px;
+  border-radius: 15px;
+  border: none;
   cursor: pointer;
-  transition: 0.3s;
+  transition: 0.2s;
+  background: rgba(255,255,255,0.08);
+  color: inherit;
 }
 
 .cell:hover {
   transform: scale(1.05);
-  background: #222;
+  background: rgba(255,255,255,0.2);
 }
 
 .win-cell {
-  background: #00ffcc;
-  color: black;
-  box-shadow: 0 0 20px #00ffcc;
-  animation: glow 1s infinite alternate;
+  background: gold !important;
+  box-shadow: 0 0 15px gold;
 }
 
-@keyframes glow {
-  from { box-shadow: 0 0 10px #00ffcc; }
-  to { box-shadow: 0 0 25px #00ffcc; }
-}
-
-.scoreboard {
-  margin: 10px;
-  font-size: 20px;
-}
-
-.reset-btn {
-  margin: 5px;
-  padding: 8px 15px;
-  border-radius: 6px;
+button {
+  padding: 8px 14px;
+  border-radius: 8px;
   border: none;
   cursor: pointer;
-  background: crimson;
-  color: white;
+  margin: 6px;
+  transition: 0.2s;
 }
 
-@media (max-width: 600px) {
-  .board {
-    grid-template-columns: repeat(3, 80px);
-  }
-
-  .cell {
-    width: 80px;
-    height: 80px;
-    font-size: 28px;
-  }
+button:hover {
+  transform: scale(1.05);
 }
