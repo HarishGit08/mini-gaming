@@ -1,272 +1,241 @@
 import { useState, useEffect, useRef } from "react";
+import { motion } from "framer-motion";
 import confetti from "canvas-confetti";
 import "./App.css";
 
-import clickSoundFile from "./assets/click.mp3.wav";
-import winSoundFile from "./assets/win.mp3.wav";
-import drawSoundFile from "./assets/draw.mp3.wav";
-import bgMusicFile from "./assets/bg.mp3";
+type Player = "X" | "O";
+type Cell = Player | null;
 
-type Player = "X" | "O" | null;
-type Difficulty = "easy" | "medium" | "hard";
+const winPatterns = [
+  [0,1,2],[3,4,5],[6,7,8],
+  [0,3,6],[1,4,7],[2,5,8],
+  [0,4,8],[2,4,6]
+];
 
-function App() {
-  const [board, setBoard] = useState<Player[]>(Array(9).fill(null));
-  const [isXNext, setIsXNext] = useState(true);
-  const [winner, setWinner] = useState<Player>(null);
-  const [isAI, setIsAI] = useState(false);
-  const [difficulty, setDifficulty] = useState<Difficulty>("easy");
-  const [winningCells, setWinningCells] = useState<number[]>([]);
-  const [musicOn, setMusicOn] = useState(true);
+function calculateWinner(board: Cell[]) {
+  for (let pattern of winPatterns) {
+    const [a,b,c] = pattern;
+    if (board[a] && board[a] === board[b] && board[a] === board[c]) {
+      return { winner: board[a], pattern };
+    }
+  }
+  return null;
+}
 
-  // ✅ Type-safe scores
-  const [scores, setScores] = useState<{ X: number; O: number }>(() => {
-    const saved = localStorage.getItem("ttt-scores");
-    return saved ? JSON.parse(saved) : { X: 0, O: 0 };
-  });
+export default function App() {
 
-  useEffect(() => {
-    localStorage.setItem("ttt-scores", JSON.stringify(scores));
-  }, [scores]);
+  const [board, setBoard] = useState<Cell[]>(Array(9).fill(null));
+  const [isXTurn, setIsXTurn] = useState(true);
+  const [mode, setMode] = useState<"AI" | "2P">("AI");
+  const [difficulty, setDifficulty] = useState<"Easy"|"Medium"|"Hard">("Hard");
+  const [theme, setTheme] = useState<"dark"|"light">("dark");
+  const [scores, setScores] = useState({ X:0, O:0 });
+  const [isMuted, setIsMuted] = useState(false);
 
-  const clickSound = useRef(new Audio(clickSoundFile));
-  const winSound = useRef(new Audio(winSoundFile));
-  const drawSound = useRef(new Audio(drawSoundFile));
-  const bgMusic = useRef(new Audio(bgMusicFile));
+  const clickSound = useRef(new Audio("/click.mp3"));
+  const winSound = useRef(new Audio("/win.mp3"));
+  const drawSound = useRef(new Audio("/draw.mp3"));
+  const bgMusic = useRef(new Audio("/bg-music.mp3"));
 
-  useEffect(() => {
+  const result = calculateWinner(board);
+  const winner = result?.winner;
+  const winningPattern = result?.pattern;
+
+  // 🎶 Background Music Setup
+  useEffect(()=>{
     bgMusic.current.loop = true;
-    bgMusic.current.volume = 0.3;
+    bgMusic.current.volume = 0.4;
+    if(!isMuted){
+      bgMusic.current.play().catch(()=>{});
+    }
+  },[]);
 
-    const startMusic = () => {
-      if (musicOn) bgMusic.current.play();
-    };
+  useEffect(()=>{
+    if(isMuted){
+      bgMusic.current.pause();
+    } else {
+      bgMusic.current.play().catch(()=>{});
+    }
+  },[isMuted]);
 
-    window.addEventListener("click", startMusic, { once: true });
+  // 🎉 Win Effect
+  useEffect(()=>{
+    if(winner){
+      if(!isMuted) winSound.current.play();
+      confetti({ particleCount:200, spread:90, origin:{ y:0.6 } });
+      setScores(prev=>({...prev, [winner]:prev[winner]+1}));
+    }
+    else if(!winner && board.every(Boolean)){
+      if(!isMuted) drawSound.current.play();
+    }
+  },[winner]);
 
-    return () => bgMusic.current.pause();
-  }, [musicOn]);
+  // 🤖 AI Logic
+  useEffect(()=>{
+    if(mode==="AI" && !isXTurn && !winner){
+      let move:number;
 
-  const lines = [
-    [0,1,2],[3,4,5],[6,7,8],
-    [0,3,6],[1,4,7],[2,5,8],
-    [0,4,8],[2,4,6]
-  ];
-
-  const checkWinner = (b: Player[]) => {
-    for (let line of lines) {
-      const [a,b1,c] = line;
-      if (b[a] && b[a] === b[b1] && b[a] === b[c]) {
-        setWinningCells(line);
-        return b[a];
+      if(difficulty==="Easy"){
+        move = randomMove();
       }
-    }
-    return null;
-  };
-
-  const handleMove = (index: number, player: Player) => {
-    if (board[index] || winner) return;
-
-    const newBoard = [...board];
-    newBoard[index] = player;
-
-    clickSound.current.currentTime = 0;
-    clickSound.current.play();
-
-    const win = checkWinner(newBoard);
-
-    setBoard(newBoard);
-    setIsXNext(player === "O");
-
-    // ✅ FIXED ERROR HERE
-    if (win === "X" || win === "O") {
-      setWinner(win);
-
-      setScores(prev => ({
-        ...prev,
-        [win]: prev[win] + 1
-      }));
-
-      winSound.current.play();
-      confetti({ particleCount: 120, spread: 90 });
-
-    } else if (!newBoard.includes(null)) {
-      drawSound.current.play();
-    }
-  };
-
-  const handleClick = (index: number) => {
-    if (!isAI) {
-      handleMove(index, isXNext ? "X" : "O");
-    } else if (isXNext) {
-      handleMove(index, "X");
-    }
-  };
-
-  // 🤖 AI
-  useEffect(() => {
-    if (isAI && !isXNext && !winner) {
-      setTimeout(() => {
-        let move = 0;
-
-        if (difficulty === "easy") {
-          move = getRandomMove(board);
-        }
-
-        if (difficulty === "medium") {
-          move = getBlockingMove(board) ?? getRandomMove(board);
-        }
-
-        if (difficulty === "hard") {
-          move = getBestMove(board);
-        }
-
-        handleMove(move, "O");
-      }, 500);
-    }
-  }, [board, isAI, isXNext, winner, difficulty]);
-
-  const getRandomMove = (b: Player[]) => {
-    const empty = b
-      .map((v, i) => (v === null ? i : null))
-      .filter(v => v !== null) as number[];
-    return empty[Math.floor(Math.random() * empty.length)];
-  };
-
-  const getBlockingMove = (b: Player[]) => {
-    for (let line of lines) {
-      const [a,b1,c] = line;
-      const values = [b[a], b[b1], b[c]];
-      if (values.filter(v => v === "X").length === 2 && values.includes(null)) {
-        return [a,b1,c][values.indexOf(null)];
+      else if(difficulty==="Medium"){
+        move = Math.random()<0.5 ? randomMove() : minimaxMove();
       }
-    }
-    return null;
-  };
-
-  const evaluate = (b: Player[]) => {
-    for (let line of lines) {
-      const [a,b1,c] = line;
-      if (b[a] && b[a] === b[b1] && b[a] === b[c]) {
-        return b[a] === "O" ? 1 : -1;
+      else{
+        move = minimaxMove();
       }
+
+      setTimeout(()=>handleMove(move),500);
     }
-    if (!b.includes(null)) return 0;
-    return null;
-  };
+  },[isXTurn]);
 
-  const minimax = (b: Player[], isMax: boolean): number => {
-    const result = evaluate(b);
-    if (result !== null) return result;
+  function randomMove(){
+    const empty = board.map((v,i)=>v===null?i:null).filter(v=>v!==null) as number[];
+    return empty[Math.floor(Math.random()*empty.length)];
+  }
 
-    if (isMax) {
-      let best = -Infinity;
-      b.forEach((cell, i) => {
-        if (cell === null) {
-          b[i] = "O";
-          best = Math.max(best, minimax(b, false));
-          b[i] = null;
+  function minimaxMove(){
+    let bestScore = -Infinity;
+    let move = 0;
+
+    board.forEach((cell,i)=>{
+      if(cell===null){
+        board[i]="O";
+        let score = minimax(board,false);
+        board[i]=null;
+        if(score>bestScore){
+          bestScore=score;
+          move=i;
+        }
+      }
+    });
+    return move;
+  }
+
+  function minimax(newBoard:Cell[], isMax:boolean):number{
+    const res = calculateWinner(newBoard);
+    if(res?.winner==="O") return 1;
+    if(res?.winner==="X") return -1;
+    if(newBoard.every(Boolean)) return 0;
+
+    if(isMax){
+      let best=-Infinity;
+      newBoard.forEach((cell,i)=>{
+        if(cell===null){
+          newBoard[i]="O";
+          best=Math.max(best,minimax(newBoard,false));
+          newBoard[i]=null;
         }
       });
       return best;
     } else {
-      let best = Infinity;
-      b.forEach((cell, i) => {
-        if (cell === null) {
-          b[i] = "X";
-          best = Math.min(best, minimax(b, true));
-          b[i] = null;
+      let best=Infinity;
+      newBoard.forEach((cell,i)=>{
+        if(cell===null){
+          newBoard[i]="X";
+          best=Math.min(best,minimax(newBoard,true));
+          newBoard[i]=null;
         }
       });
       return best;
     }
-  };
+  }
 
-  const getBestMove = (b: Player[]) => {
-    let bestScore = -Infinity;
-    let move = 0;
+  function handleMove(index:number){
+    if(board[index] || winner) return;
 
-    b.forEach((cell, i) => {
-      if (cell === null) {
-        b[i] = "O";
-        let score = minimax(b, false);
-        b[i] = null;
-        if (score > bestScore) {
-          bestScore = score;
-          move = i;
-        }
-      }
-    });
+    if(!isMuted){
+      clickSound.current.currentTime=0;
+      clickSound.current.play();
+    }
 
-    return move;
-  };
+    const newBoard=[...board];
+    newBoard[index]=isXTurn?"X":"O";
+    setBoard(newBoard);
+    setIsXTurn(!isXTurn);
+  }
 
-  const resetGame = () => {
+  function resetBoard(){
     setBoard(Array(9).fill(null));
-    setWinner(null);
-    setWinningCells([]);
-    setIsXNext(true);
-  };
+    setIsXTurn(true);
+  }
 
-  const resetScores = () => {
-    setScores({ X: 0, O: 0 });
-    localStorage.removeItem("ttt-scores");
-  };
+  function resetGame(){
+    setBoard(Array(9).fill(null));
+    setIsXTurn(true);
+    setScores({X:0,O:0});
+  }
 
-  const toggleMusic = () => {
-    if (musicOn) bgMusic.current.pause();
-    else bgMusic.current.play();
-    setMusicOn(!musicOn);
-  };
+  return(
+    <div className={`app ${theme}`}>
 
-  return (
-    <div className="container">
-      <h1>Ultimate Tic Tac Toe</h1>
+      <motion.h1 initial={{y:-40,opacity:0}} animate={{y:0,opacity:1}}>
+        Ultimate Tic Tac Toe
+      </motion.h1>
 
-      <div className="scoreboard">
-        ❌ X: {scores.X} | ⭕ O: {scores.O}
+      <div className="controls">
+        <select value={mode} onChange={e=>{setMode(e.target.value as any);resetGame();}}>
+          <option value="AI">AI Mode</option>
+          <option value="2P">2 Player</option>
+        </select>
+
+        {mode==="AI" && (
+          <select value={difficulty} onChange={e=>setDifficulty(e.target.value as any)}>
+            <option>Easy</option>
+            <option>Medium</option>
+            <option>Hard</option>
+          </select>
+        )}
+
+        <button onClick={()=>setTheme(theme==="dark"?"light":"dark")}>
+          Toggle Theme
+        </button>
+
+        <button onClick={()=>setIsMuted(!isMuted)}>
+          {isMuted ? "🔇 Unmute" : "🔊 Mute"}
+        </button>
       </div>
 
-      <div>
-        <button onClick={() => setIsAI(false)}>2 Player</button>
-        <button onClick={() => setIsAI(true)}>AI Mode</button>
+      <div className="scoreboard">
+        <div>X: {scores.X}</div>
+        <div>O: {scores.O}</div>
+      </div>
 
-        {isAI && (
-          <>
-            <button onClick={() => setDifficulty("easy")}>Easy</button>
-            <button onClick={() => setDifficulty("medium")}>Medium</button>
-            <button onClick={() => setDifficulty("hard")}>Hard</button>
-          </>
-        )}
+      <div className="status">
+        {winner ? `🏆 ${winner} Wins!`
+          : board.every(Boolean) ? "🤝 Draw!"
+          : `Turn: ${isXTurn?"X":"O"}`
+        }
       </div>
 
       <div className="board">
-        {board.map((cell, i) => (
-          <button
-            key={i}
-            className={`cell ${winningCells.includes(i) ? "win-cell" : ""}`}
-            onClick={() => handleClick(i)}
-          >
-            {cell}
-          </button>
-        ))}
+        {board.map((cell,index)=>{
+          const isWinningCell = winningPattern?.includes(index);
+          return(
+            <motion.div
+              key={index}
+              className={`cell ${isWinningCell?"winning":""}`}
+              whileHover={{scale:1.1}}
+              whileTap={{scale:0.9}}
+              onClick={()=>handleMove(index)}
+            >
+              <motion.span
+                initial={{scale:0}}
+                animate={{scale:cell?1:0}}
+                transition={{duration:0.3}}
+              >
+                {cell}
+              </motion.span>
+            </motion.div>
+          )
+        })}
       </div>
 
-      <p>
-        {winner
-          ? `Winner: ${winner}`
-          : board.includes(null)
-          ? `Turn: ${isXNext ? "X" : "O"}`
-          : "Draw!"}
-      </p>
+      <div className="buttons">
+        <button onClick={resetBoard}>Reset Board</button>
+        <button onClick={resetGame}>Reset Game</button>
+      </div>
 
-      <button onClick={resetGame}>Reset Game</button>
-      <button onClick={resetScores}>Reset Score</button>
-      <button onClick={toggleMusic}>
-        {musicOn ? "Music On" : "Music Off"}
-      </button>
     </div>
   );
 }
-
-export default App;
